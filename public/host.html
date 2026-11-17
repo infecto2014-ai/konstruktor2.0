@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Демо-витрина</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f1f6ff;
+        color: #17345c;
+        font:
+          16px system-ui,
+          sans-serif;
+      }
+      .wrap {
+        max-width: 1050px;
+        margin: 36px 24px;
+        padding: 24px;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 8px 30px #153a6620;
+      }
+      h1 {
+        margin: 0 0 16px;
+        line-height: 40px;
+        color: #155eef;
+      }
+      button {
+        line-height: 24px;
+        border: 0;
+        border-radius: 8px;
+        background: #155eef;
+        color: #fff;
+        padding: 12px 18px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 760px;
+        border: 1px solid #d6e2f5;
+        border-radius: 12px;
+        margin-top: 20px;
+      }
+      .status {
+        min-height: 1.5em;
+        color: #456;
+      }
+      p {
+        line-height: 24px;
+        margin: 16px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Демо-конструктор футболок</h1>
+      <p>
+        Хост-страница на отдельном origin для проверки связи с конструктором.
+      </p>
+      <button id="init">Открыть Classic · синий · L</button>
+      <p class="status" id="status" aria-live="polite">Ожидание конструктора</p>
+      <iframe
+        id="builder"
+        title="Конструктор футболок"
+        src="http://localhost:5173/embed"
+      ></iframe>
+    </main>
+    <script>
+      const frame = document.querySelector("#builder"),
+        status = document.querySelector("#status");
+      const appOrigin = "http://localhost:5173",
+        channel = "souvenir-constructor",
+        version = 1;
+      document.querySelector("#init").addEventListener("click", () =>
+        frame.contentWindow.postMessage(
+          {
+            channel,
+            version,
+            type: "host:init",
+            payload: { productId: "classic", colorId: "blue", size: "L" },
+          },
+          appOrigin,
+        ),
+      );
+      const labels = {
+        "constructor:ready": "Конструктор готов",
+        "constructor:height": "Размер области обновлён",
+        "project:saved": "Макет сохранён",
+        "order:created": "Заявка создана",
+        "constructor:error": "В конструкторе произошла ошибка",
+      };
+      let hasSavedResult = false;
+      const isRecord = (value) =>
+        value !== null && typeof value === "object" && !Array.isArray(value);
+      const validPayload = (type, payload) => {
+        if (!isRecord(payload)) return false;
+        if (type === "constructor:ready")
+          return Object.keys(payload).length === 0;
+        if (type === "constructor:height")
+          return (
+            Number.isFinite(payload.height) &&
+            payload.height >= 200 &&
+            payload.height <= 20000
+          );
+        if (type === "project:saved")
+          return (
+            typeof payload.id === "string" &&
+            payload.id.length > 0 &&
+            payload.id.length <= 64
+          );
+        if (type === "order:created")
+          return (
+            typeof payload.id === "string" &&
+            payload.id.length > 0 &&
+            payload.id.length <= 64 &&
+            typeof payload.number === "string" &&
+            payload.number.length > 0 &&
+            payload.number.length <= 64
+          );
+        if (type === "constructor:error")
+          return (
+            typeof payload.message === "string" &&
+            payload.message.length > 0 &&
+            payload.message.length <= 200
+          );
+        return false;
+      };
+      window.addEventListener("message", (event) => {
+        if (event.origin !== appOrigin || event.source !== frame.contentWindow)
+          return;
+        const d = event.data;
+        if (
+          !d ||
+          d.channel !== channel ||
+          d.version !== version ||
+          !Object.hasOwn(labels, d.type) ||
+          !validPayload(d.type, d.payload)
+        )
+          return;
+        if (d.type === "constructor:height") {
+          frame.style.height = `${d.payload.height}px`;
+          return;
+        }
+        if (d.type === "project:saved" || d.type === "order:created")
+          hasSavedResult = true;
+        else if (d.type === "constructor:ready" && hasSavedResult) return;
+        status.textContent = labels[d.type];
+      });
+    </script>
+  </body>
+</html>
