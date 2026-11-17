@@ -9,6 +9,12 @@
 
 CI выполняет `npm ci`, `npm test` и `npm run build` на Node.js 24.
 
+## Публичное демо на GitHub Pages
+
+Для выбранного статического демо настроен [GitHub Pages workflow](.github/workflows/pages.yml). Ожидаемая страница: [https://infecto2014-ai.github.io/konstruktor2.0/](https://infecto2014-ai.github.io/konstruktor2.0/). Публикация не считается успешной, пока workflow не завершится; текущее состояние смотрите в GitHub Actions.
+
+Pages режим поддерживает только демонстрационный каталог, локальные черновики браузера и PNG export. Серверное сохранение проектов, оформление заявок и ZIP архива требуют Node backend и на Pages не доступны. Инструкция по Pages: [docs/github-pages.md](docs/github-pages.md).
+
 ## Запуск для разработки
 
 ```sh

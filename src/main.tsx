@@ -41,6 +41,7 @@ import {
   type LoadedProject,
 } from "./api";
 import { readDraft, writeDraft, type LocalAsset } from "./draft";
+import { pagesDemo, publicAsset } from "./deployment";
 import {
   drawObjects,
   fontReady,
@@ -209,12 +210,19 @@ function App() {
       .catch(fail);
     void (async () => {
       try {
-        const catalog = await api<{
-          products: Product[];
-          allowedOrigins: string[];
-          exportDpi: number;
-          qualityWarningDpi: number;
-        }>("/api/catalog");
+        const catalog = pagesDemo
+          ? {
+              products: fallbackProducts,
+              allowedOrigins: [],
+              exportDpi: fallbackDpi,
+              qualityWarningDpi: fallbackQuality,
+            }
+          : await api<{
+              products: Product[];
+              allowedOrigins: string[];
+              exportDpi: number;
+              qualityWarningDpi: number;
+            }>("/api/catalog");
         setProducts(catalog.products);
         setDpi(catalog.exportDpi);
         setQuality(catalog.qualityWarningDpi);
@@ -229,8 +237,8 @@ function App() {
           hostOrigin.current = refOrigin;
         }
         const hash = new URLSearchParams(location.hash.slice(1)),
-          id = hash.get("project"),
-          token = hash.get("token");
+          id = pagesDemo ? null : hash.get("project"),
+          token = pagesDemo ? null : hash.get("token");
         const draft = await readDraft(location.hash || undefined).catch(
           () => undefined,
         );
@@ -639,6 +647,17 @@ function App() {
     setBusy(true);
     setError("");
     try {
+      if (pagesDemo) {
+        await writeDraft({
+          project: latest.current,
+          assets: assetLatest.current,
+          source: location.hash,
+        });
+        setStatus(
+          "Черновик сохранён в этом браузере. На сервер данные не отправляются.",
+        );
+        return;
+      }
       const payload = await syncAssets();
       const saved = await saveProject(payload);
       const url = new URL(location.href);
@@ -704,7 +723,7 @@ function App() {
             project.sides[s],
             imgs,
             product.colors.find((c) => c.id === project.colorId)!.hex,
-            product.mockups[s],
+            publicAsset(product.mockups[s]),
           ),
         );
       setPreviews(urls);
@@ -717,6 +736,7 @@ function App() {
   }
   async function submitOrder(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (pagesDemo) return;
     setBusy(true);
     setError("");
     const form = new FormData(e.currentTarget);
@@ -741,7 +761,7 @@ function App() {
             payload.project.sides[s],
             imgs,
             product.colors.find((c) => c.id === project.colorId)!.hex,
-            product.mockups[s],
+            publicAsset(product.mockups[s]),
           ),
           `preview-${s}.png`,
         );
@@ -801,7 +821,7 @@ function App() {
       <header className="brand-bar">
         <a
           className="brand"
-          href="/"
+          href={import.meta.env.BASE_URL}
           aria-label="Мастерская сувениров — конструктор"
         >
           <span className="brand-symbol">м.</span>
@@ -815,6 +835,15 @@ function App() {
         <span className="header-note">Ваши идеи. Ваш принт.</span>
       </header>
       <main>
+        {pagesDemo && (
+          <div className="messages">
+            <p className="notice">
+              Демо на GitHub Pages: редактор, локальный черновик и PNG работают
+              в браузере. Серверное сохранение и приём заявок в этой публикации
+              отключены. Не используйте её для реальных заказов.
+            </p>
+          </div>
+        )}
         <section className="intro">
           <span className="eyebrow">СОЗДАВАЙТЕ СВОЁ</span>
           <h1>
@@ -1007,7 +1036,7 @@ function App() {
               >
                 <img
                   className="garment-photo"
-                  src={product.mockups[side]}
+                  src={publicAsset(product.mockups[side])}
                   alt={`Демонстрационный вид футболки: ${sideName(side)}`}
                   style={{ filter: garmentFilter(color) }}
                 />
@@ -1456,10 +1485,14 @@ function App() {
                 }
                 onClick={() => void openOrder()}
               >
-                Проверить и оформить →
+                {pagesDemo
+                  ? "Посмотреть обе стороны"
+                  : "Проверить и оформить →"}
               </button>
               <p className="small muted">
-                Сохраняем тестовую заявку. Оплата и доставка не подключены.
+                {pagesDemo
+                  ? "Демонстрационный расчёт. Приём заявок на GitHub Pages отключён."
+                  : "Сохраняем тестовую заявку. Оплата и доставка не подключены."}
               </p>
             </section>
           </aside>
@@ -1473,7 +1506,9 @@ function App() {
             disabled={busy || !ready || !ready}
             onClick={() => void save()}
           >
-            Сохранить проект на сервере
+            {pagesDemo
+              ? "Сохранить черновик в браузере"
+              : "Сохранить проект на сервере"}
           </button>
           {savedLink && (
             <div className="saved-link">
@@ -1597,60 +1632,68 @@ function App() {
                 исходники перед реальной печатью.
               </p>
             )}
-            <form
-              className="order-form stack"
-              onSubmit={(e) => void submitOrder(e)}
-            >
-              <div className="row">
-                <label className="field">
-                  Ваше имя
-                  <input
-                    name="name"
-                    required
-                    minLength={2}
-                    maxLength={100}
-                    autoComplete="name"
-                    disabled={busy || !ready}
-                  />
-                </label>
-                <label className="field">
-                  Телефон или email
-                  <input
-                    name="contact"
-                    required
-                    minLength={5}
-                    maxLength={150}
-                    autoComplete="email"
-                    disabled={busy || !ready}
-                  />
-                </label>
-              </div>
-              <label className="consent">
-                <input
-                  name="consent"
-                  type="checkbox"
-                  required
-                  disabled={busy || !ready}
-                />
-                Согласен на сохранение указанных данных для демонстрационной
-                заявки.
-              </label>
-              <div className="price-total">
-                <span>{project.quantity} шт. · демо-стоимость</span>
-                <strong>{rub(price.total)}</strong>
-              </div>
-              {error && (
-                <p className="error" role="alert">
-                  {error}
-                </p>
-              )}
-              <button
-                className="button primary"
-                disabled={busy || !ready || !!errors.length || empty}
+            {pagesDemo ? (
+              <p className="notice">
+                Это локальное превью. Чтобы получить прозрачный принт, закройте
+                окно и нажмите «PNG текущей стороны». Заявки в демо не
+                отправляются.
+              </p>
+            ) : (
+              <form
+                className="order-form stack"
+                onSubmit={(e) => void submitOrder(e)}
               >
-                {busy ? "Сохраняем файлы и заявку…" : "Сохранить заявку"}
-              </button>
-            </form>
+                <div className="row">
+                  <label className="field">
+                    Ваше имя
+                    <input
+                      name="name"
+                      required
+                      minLength={2}
+                      maxLength={100}
+                      autoComplete="name"
+                      disabled={busy || !ready}
+                    />
+                  </label>
+                  <label className="field">
+                    Телефон или email
+                    <input
+                      name="contact"
+                      required
+                      minLength={5}
+                      maxLength={150}
+                      autoComplete="email"
+                      disabled={busy || !ready}
+                    />
+                  </label>
+                </div>
+                <label className="consent">
+                  <input
+                    name="consent"
+                    type="checkbox"
+                    required
+                    disabled={busy || !ready}
+                  />
+                  Согласен на сохранение указанных данных для демонстрационной
+                  заявки.
+                </label>
+                <div className="price-total">
+                  <span>{project.quantity} шт. · демо-стоимость</span>
+                  <strong>{rub(price.total)}</strong>
+                </div>
+                {error && (
+                  <p className="error" role="alert">
+                    {error}
+                  </p>
+                )}
+                <button
+                  className="button primary"
+                  disabled={busy || !ready || !!errors.length || empty}
+                >
+                  {busy ? "Сохраняем файлы и заявку…" : "Сохранить заявку"}
+                </button>
+              </form>
+            )}
           </>
         )}
       </dialog>
